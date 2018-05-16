@@ -25,49 +25,65 @@ from scipy.stats import gaussian_kde
 
 
 class PIC1D:
-    def __init__(self,NGP=35,L=2.*np.pi/3.0600,dt=0.2,Number_Particles=30000,initial_velocity=0.2,
-             initial_th_velocity=0.0,XP1=0.1,VP1=0.00,mode=1.0,cycles=2000,diag_step=100):
+    def __init__(self,NGP=35,L=2.0*np.pi,dt=0.2,Number_Particles=30000,cycles=2000,diag_step=100,WP=1.0)
         self.NGP=NGP
         self.L=L
         self.dt=dt
-        self.Number_Particles=Number_Particles
-        self.initial_velocity=initial_velocity
-        self.initial_th_velocity=initial_th_velocity
-        self.XP1=XP1
-        self.VP1=VP1
-        self.mode=mode
         self.cycles=cycles
-        ### constants
-        self.WP=1.0
-        self.QM=-1.0
-        self.c=1.0
-        self.Q=self.WP**2/(self.QM*Number_Particles/L)            # computational particle charge
-        self.rho_back=-self.Q*Number_Particles/L            # background charge given by background (not moving) ions
+        self.c=1.0  #DO NOT CHANGE CURRENTLY
         self.diag_step=diag_step
-
-
-#--- Initialize ---#        (moved to Constructor)
         self.dx = self.L/(1.*self.NGP-1)
-        self.particle_position = np.linspace(0.,L,Number_Particles+1)[0:-1]
-            #particle_position = np.linspace(0,L-L/Number_Particles,Number_Particles)
-#--- THIS IS SPECIFIC TO THE TWO BEAM INSTABILITY WITH THE SAME SPECIES---#
-        self.particle_velocity = initial_th_velocity * np.random.standard_normal((Number_Particles,))
-        self.particle_velocity[range(0,Number_Particles-1,2)]=initial_velocity 
-        self.particle_velocity[range(1,Number_Particles,2)]=-initial_velocity
-        self.particle_velocity = np.divide( (self.particle_velocity+VP1*np.sin(2.*np.pi*self.particle_position/L*mode) ), (1.+self.particle_velocity*VP1*np.sin(2.*np.pi*self.particle_position/L*mode)/self.c**2))
+        self.all_species=[]
+        self.c=1.0  #DO NOT CHANGE CURRENTLY
+        self.weights=np.zeros((NGP,1))  # charge density vector
+        self.Efield=np.zeros((NGP,1))   # E-field vector
+        
+        
+    def add_species(self,initial_velocity=1.0,initial_th_velocity=0.0,XP1=0.1,VP1=0.00,mode=1.0,QM=-1.0):
+        self.all_species.append(species(initial_velocity,initial_th_velocity,XP1,VP1,mode,QM))
+        
+    
+    
+    
+    
+    
+    class species:
+        def __init__(self,initial_velocity=1.0,initial_th_velocity=0.0,XP1=0.1,VP1=0.00,mode=1.0,QM=-1.0):
+            self.Number_Particles=Number_Particles
+            self.initial_velocity=initial_velocity
+            self.initial_th_velocity=initial_th_velocity
+            self.XP1=XP1
+            self.VP1=VP1
+            self.mode=mode
+            self.QM=-1.0    
+            self.Q=self.WP**2/(self.QM*Number_Particles/L)            # computational particle charge       
+            self.WP=1.0
+            
+            
+        
+        
+            #self.rho_back=-self.Q*Number_Particles/L            # background charge given by background (not moving) ions
+            self.particle_position = np.linspace(0.,L,Number_Particles+1)[0:-1]
+            
+            #uniform particle velocity default
+            self.particle_velocity=inital_velocity*np.ones(Number_Particles)
+
+            #V Space shift?
+            self.particle_velocity = np.divide( (self.particle_velocity+VP1*np.sin(2.*np.pi*self.particle_position/L*mode) ), (1.+self.particle_velocity*VP1*np.sin(2.*np.pi*self.particle_position/L*mode)/self.c**2))
+            for i in range(0,Number_Particles):
+                self.particle_position[i] += XP1*(L/Number_Particles)*np.sin(2.*np.pi*self.particle_position[i]/L*mode);
+                if self.particle_position[i]>=L:
+                    self.particle_position[i] -= L
+                if self.particle_position[i] < 0:
+                    self.particle_position[i] += L   
+        
 #----RELATIVISTIC CORRECTION DISABLED RIGHT NOW(GAMMA NOT UPDATED IN MAIN CODE)
         #self.gamma = np.sqrt( (1./(1.-(self.particle_velocity/self.c)**2) ) )
         #self.u_particles=np.zeros((Number_Particles,))
         #for i in range(0,Number_Particles):
         #    self.u_particles[i] = self.gamma[i]*self.particle_velocity[i]
-        for i in range(0,Number_Particles):
-            self.particle_position[i] += XP1*(L/Number_Particles)*np.sin(2.*np.pi*self.particle_position[i]/L*mode);
-        if self.particle_position[i]>=L:
-            self.particle_position[i] -= L
-        if self.particle_position[i] < 0:
-            self.particle_position[i] += L         
-        self.weights=np.zeros((NGP,1))
-        self.Efield=np.zeros((NGP,1))
+           
+        
                  
 #--------------------------#
 #--- charge deposition  ---#
