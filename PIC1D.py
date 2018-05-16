@@ -44,6 +44,8 @@ class PIC1D:
         self.Q=self.WP**2/(self.QM*Number_Particles/L)            # computational particle charge
         self.rho_back=-self.Q*Number_Particles/L            # background charge given by background (not moving) ions
         self.diag_step=diag_step
+        self.weights=np.zeros((NGP,1))
+        self.Efield=np.zeros((NGP,1))
 
 
 #--- Initialize ---#        (moved to Constructor)
@@ -62,24 +64,25 @@ class PIC1D:
         #    self.u_particles[i] = self.gamma[i]*self.particle_velocity[i]
         for i in range(0,Number_Particles):
             self.particle_position[i] += XP1*(L/Number_Particles)*np.sin(2.*np.pi*self.particle_position[i]/L*mode);
-        if self.particle_position[i]>=L:
-            self.particle_position[i] -= L
-        if self.particle_position[i] < 0:
-            self.particle_position[i] += L         
-        self.weights=np.zeros((NGP,1))
-        self.Efield=np.zeros((NGP,1))
+            if self.particle_position[i]>=L:
+                self.particle_position[i] -= L
+            if self.particle_position[i] < 0:
+                self.particle_position[i] += L         
+
                  
 #--------------------------#
 #--- charge deposition  ---#
     
     def particle_deposition(self): #,pos,dx,NGP):
-    # weights = np.zeros((NGP,1)) (NOW IN CONSTRUCTOR)
+        self.weights = np.zeros((NGP,1)) (NOW IN CONSTRUCTOR)
         for i in range(0,self.particle_position.size):
             v=floor(self.particle_position[i]/self.dx)
             self.weights[int(v)] += 1.-(self.particle_position[i]/self.dx-v)
             self.weights[int(v)+1] += self.particle_position[i]/self.dx-v
 
         self.weights[0]+=self.weights[-1] #periodic BC
+        self.weights *= self.Q/self.dx
+        self.weights += self.rho_back
     # return weights[0:NGP-1] no need to return as now in object.
 
 #--------------------------#
@@ -88,7 +91,8 @@ class PIC1D:
                       
     def E_calculator_potential(self): #rho,NGP,dx):
         NG=self.NGP-1
-        source = +self.weights[0:NG]*self.dx**2  #rho->weights
+        
+        self.weights *= self.dx**2  #rho->weights
         M=np.zeros((NG,NG))
         for i in range(0,NG):
             for j in range(0,NG):
@@ -101,7 +105,7 @@ class PIC1D:
         M[0,NG-1]=-1.0
         M[NG-1,0]=-1.0
 
-        Phi=np.linalg.solve(M, source) #electrostatic potential
+        Phi=np.linalg.solve(M, self.weights[0:-1]) #electrostatic potential
         
 
     #Efield=np.zeros((NGP,1))   
