@@ -25,7 +25,7 @@ from scipy.stats import gaussian_kde
 
 
 class PIC1D:
-    def __init__(self,NGP=35,L=2.*np.pi/3.0600,dt=0.2,Number_Particles=30000,initial_velocity=0.2,
+    def __init__(self,NGP=33,L=2.*np.pi,dt=0.2,Number_Particles=30000,initial_velocity=1.0,
              initial_th_velocity=0.0,XP1=0.1,VP1=0.00,mode=1.0,cycles=2000,diag_step=100):
         self.NGP=NGP
         self.L=L
@@ -74,21 +74,23 @@ class PIC1D:
 #--- charge deposition  ---#
     
     def particle_deposition(self): #,pos,dx,NGP):
-        self.weights = np.zeros((NGP,1)) (NOW IN CONSTRUCTOR)
+        self.weights = np.zeros(self.NGP) #zero out weights
         for i in range(0,self.particle_position.size):
             v=floor(self.particle_position[i]/self.dx)
             self.weights[int(v)] += 1.-(self.particle_position[i]/self.dx-v)
             self.weights[int(v)+1] += self.particle_position[i]/self.dx-v
 
-        self.weights[0]+=self.weights[-1] #periodic BC
+        self.weights[0]+=self.weights[-1]
+        self.weights[-1]=self.weights[0] #periodic BC
         self.weights *= self.Q/self.dx
         self.weights += self.rho_back
+        
     # return weights[0:NGP-1] no need to return as now in object.
 
 #--------------------------#
 #--- E-field calculator ---#
 #--- finite difference scheme ---#
-                      
+
     def E_calculator_potential(self): #rho,NGP,dx):
         NG=self.NGP-1
         
@@ -202,7 +204,7 @@ class PIC1D:
            ax3 = plt.subplot(413)
            ax3.plot(np.linspace(0,self.L,self.Efield.size),self.Efield,'k')
            fv=gaussian_kde(self.particle_velocity)
-           pts=np.linspace(-1,1,1000)
+           pts=np.linspace(1.25*np.min(self.particle_velocity),1.25*np.max(self.particle_velocity),1000)
            ax4 = plt.subplot(414)
            ax4.plot(pts,fv.evaluate(pts))
            plt.show()
