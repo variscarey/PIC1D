@@ -42,6 +42,7 @@ class PIC1D:
         self.QM=-1.0
         self.c=1.0
         self.Q=self.WP**2/(self.QM*Number_Particles/L)            # computational particle charge
+        self.M=self.Q/self.QM
         self.rho_back=-self.Q*Number_Particles/L            # background charge given by background (not moving) ions
         self.diag_step=diag_step
         self.weights=np.zeros((NGP,1))
@@ -194,7 +195,7 @@ class PIC1D:
 
 #--- Inputs ---#
 
-    def diagnostics(self,plots=True,avg_vel=True,energy=True):
+    def diagnostics(self,plots=True,avg_vel=True,energy=True,variance=True):
         if plots:
            fig = plt.figure(1, figsize=(6.0,6.0))
            ax1 = plt.subplot(411)
@@ -204,7 +205,7 @@ class PIC1D:
            ax3 = plt.subplot(413)
            ax3.plot(np.linspace(0,self.L,self.Efield.size),self.Efield,'k')
            fv=gaussian_kde(self.particle_velocity)
-           pts=np.linspace(1.25*np.min(self.particle_velocity),1.25*np.max(self.particle_velocity),1000)
+           pts=np.linspace(2*np.min(self.particle_velocity),2*np.max(self.particle_velocity),1000)
            ax4 = plt.subplot(414)
            ax4.plot(pts,fv.evaluate(pts))
            plt.show()
@@ -215,8 +216,13 @@ class PIC1D:
                 self.avg_vel=np.append(self.avg_vel,np.mean(self.particle_velocity))
             else:
                 self.avg_vel=np.array(np.mean(self.particle_velocity))
+            if variance:
+                if hasattr(self,'variance'):
+                    self.variance=np.append(self.variance,np.mean(self.particle_velocity**2)-np.mean(self.particle_velocity)**2)
+                else:
+                    self.variance=np.array(np.mean(self.particle_velocity**2)-np.mean(self.particle_velocity)**2)
         if energy:
-             kinetic_energy=np.sum(self.old_vel*self.particle_velocity)
+             kinetic_energy=self.M*np.sum(self.old_vel*self.particle_velocity)
              if hasattr(self,'kin_eng'):
                  self.kin_eng=np.append(self.kin_eng,kinetic_energy)
              else:
