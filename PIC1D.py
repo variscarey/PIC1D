@@ -43,10 +43,6 @@ class PIC1D:
         self.all_species.append(species(initial_velocity,initial_th_velocity,XP1,VP1,mode,QM))
         
     
-    
-    
-    
-    
     class species:
         def __init__(self,initial_velocity=1.0,initial_th_velocity=0.0,XP1=0.1,VP1=0.00,mode=1.0,QM=-1.0):
             self.Number_Particles=Number_Particles
@@ -58,10 +54,6 @@ class PIC1D:
             self.QM=-1.0    
             self.Q=self.WP**2/(self.QM*Number_Particles/L)            # computational particle charge       
             self.WP=1.0
-            
-            
-        
-        
             #self.rho_back=-self.Q*Number_Particles/L            # background charge given by background (not moving) ions
             self.particle_position = np.linspace(0.,L,Number_Particles+1)[0:-1]
             
@@ -77,23 +69,14 @@ class PIC1D:
                 if self.particle_position[i] < 0:
                     self.particle_position[i] += L   
         
-#----RELATIVISTIC CORRECTION DISABLED RIGHT NOW(GAMMA NOT UPDATED IN MAIN CODE)
-        #self.gamma = np.sqrt( (1./(1.-(self.particle_velocity/self.c)**2) ) )
-        #self.u_particles=np.zeros((Number_Particles,))
-        #for i in range(0,Number_Particles):
-        #    self.u_particles[i] = self.gamma[i]*self.particle_velocity[i]
-           
-        
-                 
-#--------------------------#
-#--- charge deposition  ---#
-    
     def particle_deposition(self): #,pos,dx,NGP):
-    # weights = np.zeros((NGP,1)) (NOW IN CONSTRUCTOR)
-        for i in range(0,self.particle_position.size):
-            v=floor(self.particle_position[i]/self.dx)
-            self.weights[int(v)] += 1.-(self.particle_position[i]/self.dx-v)
-            self.weights[int(v)+1] += self.particle_position[i]/self.dx-v
+        weights = np.zeros((NGP,1)) #NOW IN CONSTRUCTOR
+        for spec_ind in len(self.all_species):
+            spec=self.all_species[spec_ind]
+            for i in range(0,spec.particle_position.size):
+                v=floor(spec.particle_position[i]/self.dx)
+            self.weights[int(v)] += 1.-(spec.particle_position[i]/self.dx-v)
+            self.weights[int(v)+1] += spec.particle_position[i]/self.dx-v
 
         self.weights[0]+=self.weights[-1] #periodic BC
     # return weights[0:NGP-1] no need to return as now in object.
@@ -185,52 +168,62 @@ class PIC1D:
     
 #--- pusher ---#  (THIS IS LEAPFROG)
     def velocity_pusher(self): #particle_position,particle_velocity,gamma,self.Efield,dx,dt):
-        self.old_vel=self.particle_velocity
-        for i in range(0,self.particle_velocity.size):
-            v=np.floor(self.particle_position[i] /self.dx)
-            w1= 1.-(self.particle_position[i]/self.dx-v)
-            w2= 1.-w1
-            self.particle_velocity[i] += self.QM * (w1*self.Efield[int(v)]+w2*self.Efield[int(v)+1])*self.dt
+        #SPECIES LOOP
+        for spec_ind in len(self.all_species):
+            spec=self.all_species[spec_ind]
+            spec.old_vel=spec.particle_velocity
+            for i in range(0,spec.particle_velocity.size):
+                v=np.floor(spec.particle_position[i] /self.dx)
+                w1= 1.-(spec.particle_position[i]/self.dx-v)
+                w2= 1.-w1
+                spec.particle_velocity[i] += spec.QM * (w1*self.Efield[int(v)]+w2*self.Efield[int(v)+1])*self.dt
     #return self.particle_velocity, self.gamma  (Why gamma here?)
 
     def particle_pusher(self): #particle_position,particle_velocity,dt,L):
-        for i in range(0,self.particle_position.size):
-            self.particle_position[i] += self.particle_velocity[i]*self.dt
-            if self.particle_position[i]>=self.L:
-                self.particle_position[i] -= self.L
-            if self.particle_position[i] < 0:
-                self.particle_position[i] += self.L
+        for spec_ind in len(self.all_species):
+            spec=self.all_species[spec_ind]
+            for i in range(0,spec.particle_position.size):
+                spec.particle_position[i] += spec.particle_velocity[i]*self.dt
+                if spec.particle_position[i]>=self.L:
+                    spec.particle_position[i] -= self.L
+                if spec.particle_position[i] < 0:
+                    spec.particle_position[i] += self.L
     #return particle_position    
 
 #--- Inputs ---#
-
     def diagnostics(self,plots=True,avg_vel=True,energy=True):
         if plots:
-           fig = plt.figure(1, figsize=(6.0,6.0))
-           ax1 = plt.subplot(411)
-           ax1.plot(self.particle_position,self.particle_velocity,'om',ms=1.1)
-           ax2 = plt.subplot(412)
-           ax2.plot(np.linspace(0,self.L,self.weights.size),np.append(self.weights[0:-1],self.weights[0]),'k')
-           ax3 = plt.subplot(413)
-           ax3.plot(np.linspace(0,self.L,self.Efield.size),self.Efield,'k')
-           fv=gaussian_kde(self.particle_velocity)
-           pts=np.linspace(-1,1,1000)
-           ax4 = plt.subplot(414)
-           ax4.plot(pts,fv.evaluate(pts))
-           plt.show()
-           plt.show()
+            ax2 = plt.subplot(412)
+            ax2.plot(np.linspace(0,self.L,self.weights.size),np.append(self.weights[0:-1],self.weights[0]),'k')
+            ax3 = plt.subplot(413)
+            ax3.plot(np.linspace(0,self.L,self.Efield.size),self.Efield,'k')
+            for spec_ind in len(self.all_species):
+                spec=self.all_species[spec_ind]
+                fig = plt.figure(1, figsize=(6.0,6.0))
+                ax1 = plt.subplot(411)
+                ax1.plot(spec.particle_position,spec.particle_velocity,'om',ms=1.1)
+                fv=gaussian_kde(spec.particle_velocity)
+                pts=np.linspace(np.min(spec.particle_velocity),np.max(spec.particle_velocity),1000)
+                ax4 = plt.subplot(414)
+                ax4.plot(pts,fv.evaluate(pts))
+            plt.show()
            
         if avg_vel:
-            if hasattr(self,'avg_vel'):
-                self.avg_vel=np.append(self.avg_vel,np.mean(self.particle_velocity))
-            else:
-                self.avg_vel=np.array(np.mean(self.particle_velocity))
+            for spec_ind in len(self.all_species):
+                spec=self.all_species[spec_ind]
+                if hasattr(spec,'avg_vel'):
+                    spec.avg_vel=np.append(spec.avg_vel,np.mean(spec.particle_velocity))
+                else:
+                    spec.avg_vel=np.array(np.mean(spec.particle_velocity))
+
         if energy:
-             kinetic_energy=np.sum(self.old_vel*self.particle_velocity)
-             if hasattr(self,'kin_eng'):
-                 self.kin_eng=np.append(self.kin_eng,kinetic_energy)
-             else:
-                 self.kin_eng=np.array(kinetic_energy)
+            for spec_ind in len(self.all_species):
+                spec=self.all_species[spec_ind]
+                kinetic_energy=np.sum(spec.old_vel*spec.particle_velocity)
+                if hasattr(spec,'kin_eng'):
+                    spec.kin_eng=np.append(spec.kin_eng,kinetic_energy)
+                else:
+                    spec.kin_eng=np.array(kinetic_energy)
              potential_energy=.5*self.dx*np.sum(self.Phi[0:-1]*self.weights[0:-1])  #comp trap rule for periodic data
              if hasattr(self,'pot_eng'):
                  self.pot_eng=np.append(self.pot_eng,potential_energy)
