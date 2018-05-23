@@ -25,72 +25,75 @@ from scipy.stats import gaussian_kde
 
 
 class PIC1D:
-    def __init__(self,NGP=33,L=2.*np.pi,dt=0.2,Number_Particles=30000,initial_velocity=1.0,
-             initial_th_velocity=0.0,XP1=0.1,VP1=0.00,mode=1.0,cycles=2000,diag_step=100):
+    def __init__(self,NGP=35,L=2.0*np.pi,dt=0.2,cycles=2000,diag_step=100,WP=1.0,rho_back=True):
         self.NGP=NGP
         self.L=L
         self.dt=dt
-        self.Number_Particles=Number_Particles
-        self.initial_velocity=initial_velocity
-        self.initial_th_velocity=initial_th_velocity
-        self.XP1=XP1
-        self.VP1=VP1
-        self.mode=mode
         self.cycles=cycles
-        ### constants
-        self.WP=1.0
-        self.QM=-1.0
-        self.c=1.0
-        self.Q=self.WP**2/(self.QM*Number_Particles/L)            # computational particle charge
-        self.M=self.Q/self.QM
-        self.rho_back=-self.Q*Number_Particles/L            # background charge given by background (not moving) ions
+        self.c=1.0  #DO NOT CHANGE CURRENTLY
         self.diag_step=diag_step
-        self.weights=np.zeros((NGP,1))
-        self.Efield=np.zeros((NGP,1))
-
-
-#--- Initialize ---#        (moved to Constructor)
         self.dx = self.L/(1.*self.NGP-1)
-        self.particle_position = np.linspace(0.,L,Number_Particles+1)[0:-1]
-            #particle_position = np.linspace(0,L-L/Number_Particles,Number_Particles)
-#--- THIS IS SPECIFIC TO THE TWO BEAM INSTABILITY WITH THE SAME SPECIES---#
-        self.particle_velocity = initial_th_velocity * np.random.standard_normal((Number_Particles,))
-        self.particle_velocity[range(0,Number_Particles-1,2)]=initial_velocity 
-        self.particle_velocity[range(1,Number_Particles,2)]=-initial_velocity
-        self.particle_velocity = np.divide( (self.particle_velocity+VP1*np.sin(2.*np.pi*self.particle_position/L*mode) ), (1.+self.particle_velocity*VP1*np.sin(2.*np.pi*self.particle_position/L*mode)/self.c**2))
-#----RELATIVISTIC CORRECTION DISABLED RIGHT NOW(GAMMA NOT UPDATED IN MAIN CODE)
-        #self.gamma = np.sqrt( (1./(1.-(self.particle_velocity/self.c)**2) ) )
-        #self.u_particles=np.zeros((Number_Particles,))
-        #for i in range(0,Number_Particles):
-        #    self.u_particles[i] = self.gamma[i]*self.particle_velocity[i]
-        for i in range(0,Number_Particles):
-            self.particle_position[i] += XP1*(L/Number_Particles)*np.sin(2.*np.pi*self.particle_position[i]/L*mode);
-            if self.particle_position[i]>=L:
-                self.particle_position[i] -= L
-            if self.particle_position[i] < 0:
-                self.particle_position[i] += L         
+        self.all_species=[]
+        self.c=1.0  #DO NOT CHANGE CURRENTLY
+        self.weights=np.zeros((NGP,1))  # charge density vector
+        self.Efield=np.zeros((NGP,1))   # E-field vector
+        self.rho_back=rho_back
 
-                 
-#--------------------------#
-#--- charge deposition  ---#
-    
-    def particle_deposition(self): #,pos,dx,NGP):
-        self.weights = np.zeros(self.NGP) #zero out weights
-        for i in range(0,self.particle_position.size):
-            v=floor(self.particle_position[i]/self.dx)
-            self.weights[int(v)] += 1.-(self.particle_position[i]/self.dx-v)
-            self.weights[int(v)+1] += self.particle_position[i]/self.dx-v
+    class species:
+        def __init__(self,Number_Particles=257,initial_velocity=1.0,initial_th_velocity=0.0,XP1=0.1,VP1=0.00,mode=1.0,QM=-1.0,L=2*np.pi,WP=1.0,name=None,quiet=True):
+            self.Number_Particles=Number_Particles
+            self.initial_velocity=initial_velocity
+            self.initial_th_velocity=initial_th_velocity
+            self.XP1=XP1
+            self.VP1=VP1
+            self.mode=mode
+            self.QM=-1.0    
+            self.Q=WP**2/(self.QM*Number_Particles/L)   # computational particle charge       
+            #self.rho_back=-self.Q*Number_Particles/L            # background charge given by background (not moving) ions
+            self.M=self.Q/self.QM
+            self.particle_position = np.linspace(0.,L,Number_Particles+1)[0:-1]
+            
+            #uniform particle velocity default
+            self.particle_velocity=initial_velocity*np.ones(Number_Particles)
 
-        self.weights[0]+=self.weights[-1]
-        self.weights[-1]=self.weights[0] #periodic BC
-        self.weights *= self.Q/self.dx
-        self.weights += self.rho_back
+            #V Space shift?
+            self.particle_velocity = np.divide( (self.particle_velocity+VP1*np.sin(2.*np.pi*self.particle_position/L*mode) ), (1.+self.particle_velocity*VP1*np.sin(2.*np.pi*self.particle_position/L*mode)))
+            for i in range(0,Number_Particles):
+                self.particle_position[i] += XP1*(L/Number_Particles)*np.sin(2.*np.pi*self.particle_position[i]/L*mode);
+                if self.particle_position[i]>=L:
+                    self.particle_position[i] -= L
+                if self.particle_position[i] < 0:
+                    self.particle_position[i] += L   
+
         
+    def add_species(self,Number_Particles=257,initial_velocity=1.0,initial_th_velocity=0.0,XP1=0.1,VP1=0.00,mode=1.0,QM=-1.0,WP=1.0,L=2*np.pi,name=None,quiet=True):
+        self.all_species.append(self.species(Number_Particles=Number_Particles,initial_velocity=initial_velocity,initial_th_velocity=initial_th_velocity,XP1=XP1,VP1=VP1,mode=mode,QM=QM,WP=WP,L=L,name=name,quiet=quiet))
+        
+        
+    def particle_deposition(self): #,pos,dx,NGP):
+        self.weights = np.zeros((self.NGP,1)) #RESET CHARGE
+        for spec in self.all_species:
+            Qoverdx=spec.Q/self.dx
+            for i in range(0,spec.particle_position.size):
+                v=floor(spec.particle_position[i]/self.dx)
+                self.weights[int(v)] += Qoverdx*(1.-(spec.particle_position[i]/self.dx-v))
+                self.weights[int(v)+1] += Qoverdx*(spec.particle_position[i]/self.dx-v)
+
+        self.weights[0]+=self.weights[-1] #periodic BC
+        self.weights += self.rho_back
+
     # return weights[0:NGP-1] no need to return as now in object.
 
 #--------------------------#
 #--- E-field calculator ---#
 #--- finite difference scheme ---#
+
+    def background_charge(self):
+        #enforce neutrality with steady background
+        temp=0
+        for spec in self.all_species:
+            temp += spec.Q*spec.Number_Particles/self.L
+        self.rho_back= -temp
 
     def E_calculator_potential(self): #rho,NGP,dx):
         NG=self.NGP-1
@@ -145,6 +148,8 @@ class PIC1D:
 #        for j in range(0,NG):
 #            if i == j:
 #                M[i,j]=+2.0
+
+
 #            if j == i-1:
 #                M[i,j]=-1.0
 #            if j == i+1:
@@ -176,64 +181,64 @@ class PIC1D:
     
 #--- pusher ---#  (THIS IS LEAPFROG)
     def velocity_pusher(self): #particle_position,particle_velocity,gamma,self.Efield,dx,dt):
-        self.old_vel=self.particle_velocity
-        for i in range(0,self.particle_velocity.size):
-            v=np.floor(self.particle_position[i] /self.dx)
-            w1= 1.-(self.particle_position[i]/self.dx-v)
-            w2= 1.-w1
-            self.particle_velocity[i] += self.QM * (w1*self.Efield[int(v)]+w2*self.Efield[int(v)+1])*self.dt
+        #SPECIES LOOP
+        for spec in self.all_species:
+            spec.old_vel=spec.particle_velocity
+            for i in range(0,spec.particle_velocity.size):
+                v=np.floor(spec.particle_position[i] /self.dx)
+                w1= 1.-(spec.particle_position[i]/self.dx-v)
+                w2= 1.-w1
+                spec.particle_velocity[i] += spec.QM * (w1*self.Efield[int(v)]+w2*self.Efield[int(v)+1])*self.dt
     #return self.particle_velocity, self.gamma  (Why gamma here?)
 
     def particle_pusher(self): #particle_position,particle_velocity,dt,L):
-        for i in range(0,self.particle_position.size):
-            self.particle_position[i] += self.particle_velocity[i]*self.dt
-            if self.particle_position[i]>=self.L:
-                self.particle_position[i] -= self.L
-            if self.particle_position[i] < 0:
-                self.particle_position[i] += self.L
+        for spec in self.all_species:
+            for i in range(0,spec.particle_position.size):
+                spec.particle_position[i] += spec.particle_velocity[i]*self.dt
+                if spec.particle_position[i]>=self.L:
+                    spec.particle_position[i] -= self.L
+                if spec.particle_position[i] < 0:
+                    spec.particle_position[i] += self.L
     #return particle_position    
 
 #--- Inputs ---#
 
-    def diagnostics(self,plots=True,avg_vel=True,energy=True,variance=True):
+    def diagnostics(self,plots=True,avg_vel=True,energy=True):
         if plots:
-           fig = plt.figure(1, figsize=(6.0,6.0))
-           ax1 = plt.subplot(411)
-           ax1.plot(self.particle_position,self.particle_velocity,'om',ms=1.1)
-           ax2 = plt.subplot(412)
-           ax2.plot(np.linspace(0,self.L,self.weights.size),np.append(self.weights[0:-1],self.weights[0]),'k')
-           ax3 = plt.subplot(413)
-           ax3.plot(np.linspace(0,self.L,self.Efield.size),self.Efield,'k')
-           fv=gaussian_kde(self.particle_velocity)
-           pts=np.linspace(2*np.min(self.particle_velocity),2*np.max(self.particle_velocity),1000)
-           ax4 = plt.subplot(414)
-           ax4.plot(pts,fv.evaluate(pts))
-           plt.show()
-           plt.show()
+            ax2 = plt.subplot(412)
+            ax2.plot(np.linspace(0,self.L,self.weights.size),np.append(self.weights[0:-1],self.weights[0]),'k')
+            ax3 = plt.subplot(413)
+            ax3.plot(np.linspace(0,self.L,self.Efield.size),self.Efield,'k')
+            for spec in self.all_species:
+                fig = plt.figure(1, figsize=(6.0,6.0))
+                ax1 = plt.subplot(411)
+                ax1.plot(spec.particle_position,spec.particle_velocity,'o',ms=1.1)
+                fv=gaussian_kde(spec.particle_velocity)
+                smin=np.min(spec.particle_velocity)-fv.factor
+                smax=np.max(spec.particle_velocity)+fv.factor
+                pts=np.linspace(smin,smax,1000)
+                ax4 = plt.subplot(414)
+                ax4.plot(pts,fv.evaluate(pts))
+            plt.show()
            
         if avg_vel:
-            if hasattr(self,'avg_vel'):
-                self.avg_vel=np.append(self.avg_vel,np.mean(self.particle_velocity))
-            else:
-                self.avg_vel=np.array(np.mean(self.particle_velocity))
-            if variance:
-                if hasattr(self,'variance'):
-                    self.variance=np.append(self.variance,np.mean(self.particle_velocity**2)-np.mean(self.particle_velocity)**2)
+            for spec in self.all_species:
+                if hasattr(spec,'avg_vel'):
+                    spec.avg_vel=np.append(spec.avg_vel,np.mean(spec.particle_velocity))
                 else:
-                    self.variance=np.array(np.mean(self.particle_velocity**2)-np.mean(self.particle_velocity)**2)
+                    spec.avg_vel=np.array(np.mean(spec.particle_velocity))
+
         if energy:
-             kinetic_energy=self.M*np.sum(self.old_vel*self.particle_velocity)
-             if hasattr(self,'kin_eng'):
-                 self.kin_eng=np.append(self.kin_eng,kinetic_energy)
-             else:
-                 self.kin_eng=np.array(kinetic_energy)
-             potential_energy=.5*self.dx*np.sum(self.Phi[0:-1]*self.weights[0:-1])  #comp trap rule for periodic data
-             if hasattr(self,'pot_eng'):
-                 self.pot_eng=np.append(self.pot_eng,potential_energy)
-             else:
-                 self.pot_eng=np.array(potential_energy)                     
-           
-
-
+            for spec in self.all_species:
+                kinetic_energy=spec.M*np.sum(spec.old_vel*spec.particle_velocity)
+                if hasattr(spec,'kin_eng'):
+                    spec.kin_eng=np.append(spec.kin_eng,kinetic_energy)
+                else:
+                    spec.kin_eng=np.array(kinetic_energy)
+            potential_energy=.5*self.dx*np.sum(self.Phi[0:-1]*self.weights[0:-1])#comp trap rule for periodic data
+            if hasattr(self,'pot_eng'):
+                self.pot_eng=np.append(self.pot_eng,potential_energy)
+            else:
+                self.pot_eng=np.array(potential_energy)                     
 
 
