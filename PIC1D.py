@@ -35,8 +35,8 @@ class PIC1D:
         self.dx = self.L/(1.*self.NGP-1)
         self.all_species=[]
         self.c=1.0  #DO NOT CHANGE CURRENTLY
-        self.weights=np.zeros((NGP,1))  # charge density vector
-        self.Efield=np.zeros((NGP,1))   # E-field vector
+        self.weights=np.zeros(NGP)  # charge density vector
+        self.Efield=np.zeros(NGP)   # E-field vector
         self.rho_back=rho_back
 
     class species:
@@ -47,7 +47,7 @@ class PIC1D:
             self.XP1=XP1
             self.VP1=VP1
             self.mode=mode
-            self.QM=-1.0    
+            self.QM=QM
             self.Q=WP**2/(self.QM*Number_Particles/L)   # computational particle charge       
             #self.rho_back=-self.Q*Number_Particles/L            # background charge given by background (not moving) ions
             self.M=self.Q/self.QM
@@ -58,6 +58,7 @@ class PIC1D:
 
             #V Space shift?
             self.particle_velocity = np.divide( (self.particle_velocity+VP1*np.sin(2.*np.pi*self.particle_position/L*mode) ), (1.+self.particle_velocity*VP1*np.sin(2.*np.pi*self.particle_position/L*mode)))
+
             for i in range(0,Number_Particles):
                 self.particle_position[i] += XP1*(L/Number_Particles)*np.sin(2.*np.pi*self.particle_position[i]/L*mode);
                 if self.particle_position[i]>=L:
@@ -71,7 +72,7 @@ class PIC1D:
         
         
     def particle_deposition(self): #,pos,dx,NGP):
-        self.weights = np.zeros((self.NGP,1)) #RESET CHARGE
+        self.weights = np.zeros(self.NGP) #RESET CHARGE
         for spec in self.all_species:
             Qoverdx=spec.Q/self.dx
             for i in range(0,spec.particle_position.size):
@@ -80,7 +81,8 @@ class PIC1D:
                 self.weights[int(v)+1] += Qoverdx*(spec.particle_position[i]/self.dx-v)
 
         self.weights[0]+=self.weights[-1] #periodic BC
-        self.weights += self.rho_back
+        if self.rho_back != 0:
+            self.weights += self.rho_back
 
     # return weights[0:NGP-1] no need to return as now in object.
 
@@ -112,9 +114,7 @@ class PIC1D:
         M[NG-1,0]=-1.0
 
         Phi=np.linalg.solve(M, self.weights[0:-1]) #electrostatic potential
-        
 
-    #Efield=np.zeros((NGP,1))   
         #finite difference gradient of potential is electric field
         for i in range(1,NG-1):
             self.Efield[i] = (Phi[i+1]-Phi[i-1]) / 2. / self.dx
